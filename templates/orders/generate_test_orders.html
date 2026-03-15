@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Генерация тестовых заказов - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Генерация тестовых заказов</h1>
+    <p class="muted">
+        Эта страница нужна только для удобного локального тестирования.
+        Заказы создаются по заранее подготовленным адресам Челябинска с готовыми координатами.
+    </p>
+
+    {% if created_count %}
+        <div style="margin: 18px 0; padding: 14px; border: 1px solid #cfe8cf; border-radius: 10px; background: #f3fbf3;">
+            Создано тестовых заказов: <strong>{{ created_count }}</strong>
+        </div>
+    {% endif %}
+
+    <div style="margin: 18px 0; padding: 16px; border: 1px solid #ddd; border-radius: 12px;">
+        <p><strong>Максимум за один раз:</strong> {{ max_available }}</p>
+
+        <form method="post">
+            {% csrf_token %}
+
+            <label for="count"><strong>Количество заказов:</strong></label><br>
+            <input
+                id="count"
+                name="count"
+                type="number"
+                min="1"
+                max="{{ max_available }}"
+                value="20"
+                style="margin-top:8px; margin-bottom:16px; padding:10px; width:120px; border:1px solid #ccc; border-radius:8px;"
+            ><br>
+
+            <button type="submit">Сгенерировать тестовые заказы</button>
+        </form>
+    </div>
+
+    <p class="muted">
+        После генерации новые заказы появятся в общем списке заказов и смогут участвовать в автоматической кластеризации на карте.
+    </p>
+{% endblock %}

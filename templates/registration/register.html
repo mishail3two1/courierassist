@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Регистрация - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Регистрация</h1>
+    <p class="muted">Создай новый аккаунт: имя пользователя и пароль.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Создать аккаунт</button>
+    </form>
+
+    <p style="margin-top: 16px;">
+        Уже есть аккаунт? <a href="{% url 'login' %}">Войти</a>
+    </p>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Список заказов - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Список заказов</h1>
+    <p class="muted">Здесь отображаются заказы из базы данных SQLite.</p>
+    <p class="muted">Взять заказ напрямую здесь нельзя. Назначение выполняется только через выбор кластера на карте.</p>
+
+    {% if orders %}
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+            <thead>
+                <tr>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">ID</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Адрес</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Статус</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Курьер</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Создан</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Действие</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                    <tr>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{{ order.id }}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{{ order.address }}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{{ order.get_status_display }}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">
+                            {% if order.courier %}
+                                {{ order.courier.username }}
+                            {% else %}
+                                Не назначен
+                            {% endif %}
+                        </td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">
+                            {{ order.created_at|date:"d.m.Y H:i" }}
+                        </td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">
+                            {% if not order.courier and order.status == "NEED" %}
+                                Только через кластер
+                            {% elif order.courier %}
+                                Уже назначен
+                            {% else %}
+                                Недоступно
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>Заказов пока нет.</p>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}CourierAssist{% endblock %}</title>
+    {% block extra_head %}{% endblock %}
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f7fb;
+            color: #222;
+        }
+
+        .topbar {
+            background: #1f3b5b;
+            color: white;
+            padding: 16px 24px;
+        }
+
+        .topbar-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .brand a {
+            color: white;
+            text-decoration: none;
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        .menu {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .menu a {
+            color: white;
+            text-decoration: none;
+        }
+
+        .menu a:hover {
+            text-decoration: underline;
+        }
+
+        .logout-form {
+            display: inline;
+            margin: 0;
+        }
+
+        .logout-form button {
+            background: transparent;
+            border: 1px solid white;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .logout-form button:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .page {
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+        }
+
+        .muted {
+            color: #666;
+        }
+
+        .errorlist {
+            color: #b00020;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            max-width: 360px;
+            padding: 10px;
+            margin-top: 4px;
+            margin-bottom: 14px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+
+        button[type="submit"] {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            background: #1f3b5b;
+            color: white;
+            cursor: pointer;
+        }
+
+        button[type="submit"]:hover {
+            opacity: 0.95;
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="topbar-inner">
+            <div class="brand">
+                <a href="{% url 'home' %}">CourierAssist</a>
+            </div>
+
+            <div class="menu">
+                <a href="{% url 'home' %}">Главная</a>
+
+                {% if request.user.is_authenticated %}
+                    <a href="{% url 'order_list' %}">Заказы</a>
+                    <a href="{% url 'order_map' %}">Карта</a>
+                    <a href="{% url 'my_orders' %}">Мои заказы</a>
+                    <a href="{% url 'generate_test_orders' %}">Тестовые заказы</a>
+                    <a href="{% url 'cabinet' %}">Кабинет</a>
+                    <span>Вы вошли как: <strong>{{ request.user.username }}</strong></span>
+
+                    <form method="post" action="{% url 'logout' %}" class="logout-form">
+                        {% csrf_token %}
+                        <button type="submit">Выйти</button>
+                    </form>
+                {% else %}
+                    <span>Вы не вошли</span>
+                    <a href="{% url 'login' %}">Вход</a>
+                    <a href="{% url 'register' %}">Регистрация</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="page">
+        <div class="card">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Кластеры заказов - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Сохранённые кластеры заказов</h1>
+    <p class="muted">
+        Здесь показаны кластеры, которые уже сохранены в базе данных.
+    </p>
+
+    <div style="margin: 18px 0;">
+        <form method="post" action="{% url 'rebuild_clusters' %}">
+            {% csrf_token %}
+            <button type="submit">Пересчитать и сохранить кластеры</button>
+        </form>
+    </div>
+
+    <div style="margin: 18px 0; padding: 14px; border: 1px solid #ddd; border-radius: 10px;">
+        <p style="margin: 0 0 8px 0;"><strong>Лимит заказов в кластере:</strong> {{ max_cluster_size }}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Максимальная дистанция:</strong> {{ max_distance_km }} км</p>
+        <p style="margin: 0 0 8px 0;"><strong>Максимальный общий вес:</strong> {{ max_total_weight }}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Заказов внутри сохранённых кластеров:</strong> {{ total_clustered_orders }}</p>
+        <p style="margin: 0;"><strong>Заказов NEED без координат:</strong> {{ orders_without_coordinates }}</p>
+    </div>
+
+    {% if clusters %}
+        {% for cluster in clusters %}
+            <div style="margin-top: 24px; padding: 18px; border: 1px solid #ddd; border-radius: 12px;">
+                <h2 style="margin-top: 0;">Кластер {{ cluster.number }}</h2>
+
+                <p class="muted" style="margin-bottom: 10px;">
+                    Заказов: <strong>{{ cluster.order_count }}</strong>,
+                    общий вес: <strong>{{ cluster.total_weight }}</strong>,
+                    центр: <strong>{{ cluster.center_lat }}, {{ cluster.center_lon }}</strong>
+                </p>
+
+                <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">ID</th>
+                            <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">Адрес</th>
+                            <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">Вес</th>
+                            <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">Статус</th>
+                            <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">Координаты</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in cluster.orders %}
+                            <tr>
+                                <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ order.id }}</td>
+                                <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ order.address }}</td>
+                                <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ order.weight }}</td>
+                                <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ order.get_status_display }}</td>
+                                <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                                    {{ order.latitude }}, {{ order.longitude }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>Сохранённых кластеров пока нет. Нажми кнопку “Пересчитать и сохранить кластеры”.</p>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Главная - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>CourierAssist</h1>
+    <p>Главная страница учебного проекта.</p>
+
+    {% if request.user.is_authenticated %}
+        <p>Сейчас на сайт вошёл пользователь: <strong>{{ request.user.username }}</strong>.</p>
+    {% else %}
+        <p>Сейчас пользователь не вошёл в систему.</p>
+    {% endif %}
+{% endblock %}

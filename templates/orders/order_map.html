@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+
+{% block title %}Карта заказов - CourierAssist{% endblock %}
+
+{% block extra_head %}
+    <script src="https://telegram.org/js/telegram-web-app.js?61"></script>
+{% endblock %}
+
+{% block content %}
+    <h1>Основная карта заказов</h1>
+
+    {% if active_cluster_mode %}
+        <p class="muted">
+            Сейчас показан только ваш активный кластер <strong>№ {{ active_cluster_number }}</strong>.
+            Серые точки — ещё не доставлены, зелёные — уже доставлены.
+        </p>
+    {% else %}
+        <p class="muted">
+            На карте показаны свободные кластеры заказов. Они пересчитываются автоматически при открытии карты.
+        </p>
+    {% endif %}
+
+    <div style="margin: 18px 0; padding: 14px; border: 1px solid #ddd; border-radius: 10px;">
+        <p style="margin: 0 0 8px 0;"><strong>Кластеров на карте:</strong> {{ cluster_count }}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Лимит заказов в кластере:</strong> {{ max_cluster_size }}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Максимальная дистанция:</strong> {{ max_distance_km }} км</p>
+        <p style="margin: 0;"><strong>Максимальный общий вес:</strong> {{ max_total_weight }}</p>
+    </div>
+
+    {% if request.user.is_authenticated %}
+        <p class="muted" style="margin-top: 18px;">
+            Настройки и информация по Telegram теперь находятся во вкладке <strong>«Кабинет»</strong>.
+        </p>
+    {% endif %}
+
+
+    {% if active_cluster_mode and route_points %}
+        <p class="muted">
+            На карте также показан маршрут по дорогам для ещё не доставленных домов.
+        </p>
+    {% endif %}
+
+    {% if cluster_points %}
+        <p>На карте будет показано точек: <strong>{{ cluster_points|length }}</strong></p>
+    {% else %}
+        {% if active_cluster_mode %}
+            <p>У активного кластера пока нет точек для отображения.</p>
+        {% else %}
+            <p>Свободных кластеров пока нет.</p>
+        {% endif %}
+    {% endif %}
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    >
+
+    <style>
+        #map {
+            width: 100%;
+            height: 560px;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .route-stop-label {
+            background: #ffffff;
+            border: 1px solid #cfcfcf;
+            border-radius: 999px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+            color: #222;
+            font-size: 12px;
+            font-weight: bold;
+            min-width: 22px;
+            height: 22px;
+            line-height: 22px;
+            text-align: center;
+            padding: 0 4px;
+        }
+    </style>
+
+    <div id="map"></div>
+
+    <form id="csrf-form" style="display:none;">
+        {% csrf_token %}
+    </form>
+
+    {{ cluster_points|json_script:"cluster-points-data" }}
+    {{ cluster_areas|json_script:"cluster-areas-data" }}
+    {{ office|json_script:"office-map-data" }}
+    {{ route_points|json_script:"route-points-data" }}
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
+
+    <script>
+        const clusterPoints = JSON.parse(
+            document.getElementById("cluster-points-data").textContent
+        );
+
+        const clusterAreas = JSON.parse(
+            document.getElementById("cluster-areas-data").textContent
+        );
+
+        const office = JSON.parse(
+            document.getElementById("office-map-data").textContent
+        );
+
+        const routePoints = JSON.parse(
+            document.getElementById("route-points-data").textContent
+        );
+
+        const csrfToken = document.querySelector(
+            "#csrf-form input[name=csrfmiddlewaretoken]"
+        )?.value || "";
+
+        const ROUTE_COLOR = "#1565c0";
+
+        const map = L.map("map").setView([office.latitude, office.longitude], 12);
+
+        map.createPane("labels");
+        map.getPane("labels").style.zIndex = 650;
+        map.getPane("labels").style.pointerEvents = "none";
+
+        L.tileLayer(
+            "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
+            {
+                attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+                subdomains: "abcd",
+                maxZoom: 20
+            }
+        ).addTo(map);
+
+        L.tileLayer(
+            "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
+            {
+                attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+                subdomains: "abcd",
+                maxZoom: 20,
+                pane: "labels"
+            }
+        ).addTo(map);
+
+        const officeMarker = L.marker([office.latitude, office.longitude]).addTo(map);
+        officeMarker.bindPopup(
+            `<strong>${office.name}</strong><br>Центральная точка`
+        );
+
+        const bounds = [[office.latitude, office.longitude]];
+        const markerByOrderId = new Map();
+        const stopLabelByOrderId = new Map();
+        const activeAreaLayers = [];
+        let routeLayer = null;
+
+        function buildAreaPopupHtml(area) {
+            if (area.is_active) {
+                let html =
+                    `<strong>Ваш активный кластер ${area.cluster_number}</strong><br>` +
+                    `Заказов: ${area.order_count}<br>` +
+                    `Доставлено: ${area.delivered_count}<br>` +
+                    `Общий вес: ${area.total_weight}`;
+
+                if (area.type === "circle") {
+                    html += `<br>Радиус: ${area.radius_m} м`;
+                }
+
+                return html;
+            }
+
+            let html =
+                `<strong>Кластер ${area.cluster_number}</strong><br>` +
+                `Заказов: ${area.order_count}<br>` +
+                `Общий вес: ${area.total_weight}<br><br>` +
+                `<a href="${area.take_url}">Выбрать этот кластер</a>`;
+
+            if (area.type === "circle") {
+                html += `<br>Радиус: ${area.radius_m} м`;
+            }
+
+            return html;
+        }
+
+        function refreshActiveAreaPopups() {
+            for (const area of clusterAreas) {
+                area.delivered_count = clusterPoints.filter(
+                    (point) => point.cluster_id === area.cluster_id && point.is_delivered
+                ).length;
+            }
+
+            for (const layerInfo of activeAreaLayers) {
+                layerInfo.layer.bindPopup(buildAreaPopupHtml(layerInfo.area));
+            }
+        }
+
+        function getRoutePointByOrderId(orderId) {
+            return routePoints.find(
+                (routePoint) => routePoint.kind === "order" && routePoint.order_id === orderId
+            );
+        }
+
+        function buildMarkerPopupHtml(point) {
+            let popupHtml =
+                `<strong>Кластер ${point.cluster_number}</strong><br>` +
+                `Заказ #${point.id}<br>` +
+                `Адрес: ${point.address}<br>` +
+                `Статус: ${point.status}<br>` +
+                `Вес: ${point.weight}`;
+
+            const routeStop = getRoutePointByOrderId(point.id);
+
+            if (routeStop) {
+                popupHtml += `<br>Точка маршрута: ${routeStop.stop_number}`;
+            }
+
+            if (point.is_active && !point.is_delivered && point.complete_url) {
+                popupHtml +=
+                    `<br><br>` +
+                    `<form method="post" action="${point.complete_url}" class="js-complete-order-form" data-order-id="${point.id}">` +
+                    `<input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">` +
+                    `<button type="submit">В этот дом доставлено</button>` +
+                    `</form>`;
+            }
+
+            if (point.is_delivered) {
+                popupHtml += `<br><strong style="color:#2e7d32;">Доставлено</strong>`;
+            }
+
+            return popupHtml;
+        }
+
+        function updateMarkerAfterDelivery(orderId, deliveredStatusText) {
+            const point = clusterPoints.find((item) => item.id === orderId);
+            if (!point) {
+                return;
+            }
+
+            point.is_delivered = true;
+            point.color = "#2e7d32";
+            point.status = deliveredStatusText;
+            point.complete_url = "";
+
+            const marker = markerByOrderId.get(orderId);
+            if (marker) {
+                marker.setStyle({
+                    color: point.color,
+                    fillColor: point.color,
+                    fillOpacity: 0.9,
+                    weight: 2,
+                });
+                marker.bindPopup(buildMarkerPopupHtml(point));
+                marker.openPopup();
+            }
+
+            refreshActiveAreaPopups();
+        }
+
+        function clearRouteLayer() {
+            if (routeLayer) {
+                map.removeLayer(routeLayer);
+                routeLayer = null;
+            }
+        }
+
+        async function drawRoadRoute({ preserveView = false } = {}) {
+            clearRouteLayer();
+
+            if (routePoints.length < 2) {
+                return;
+            }
+
+            const coordinates = routePoints
+                .map((point) => `${point.lng},${point.lat}`)
+                .join(";");
+
+            const routeUrl =
+                `https://router.project-osrm.org/route/v1/driving/${coordinates}` +
+                `?overview=full&geometries=geojson&steps=false`;
+
+            try {
+                const response = await fetch(routeUrl);
+                if (!response.ok) {
+                    throw new Error("OSRM route request failed");
+                }
+
+                const data = await response.json();
+
+                if (!data.routes || data.routes.length === 0) {
+                    throw new Error("No routes returned");
+                }
+
+                const routeGeometry = data.routes[0].geometry;
+
+                routeLayer = L.geoJSON(routeGeometry, {
+                    style: {
+                        color: ROUTE_COLOR,
+                        weight: 5,
+                        opacity: 0.9,
+                    },
+                }).addTo(map);
+
+                routeLayer.bindPopup(
+                    `Маршрут по дорогам<br>` +
+                    `Длина: ${(data.routes[0].distance / 1000).toFixed(2)} км<br>` +
+                    `Время: ${(data.routes[0].duration / 60).toFixed(0)} мин`
+                );
+
+                if (!preserveView && routeLayer.getBounds().isValid()) {
+                    bounds.push(
+                        [routeLayer.getBounds().getSouthWest().lat, routeLayer.getBounds().getSouthWest().lng],
+                        [routeLayer.getBounds().getNorthEast().lat, routeLayer.getBounds().getNorthEast().lng]
+                    );
+                    map.fitBounds(bounds, { padding: [30, 30] });
+                }
+            } catch (error) {
+                console.error("Ошибка построения маршрута по дорогам:", error);
+
+                const fallbackLatLngs = routePoints.map((point) => [point.lat, point.lng]);
+
+                routeLayer = L.polyline(fallbackLatLngs, {
+                    color: ROUTE_COLOR,
+                    weight: 5,
+                    opacity: 0.65,
+                    dashArray: "8, 8",
+                }).addTo(map);
+
+                routeLayer.bindPopup("Не удалось получить маршрут по дорогам. Показана резервная линия.");
+            }
+        }
+
+        for (const area of clusterAreas) {
+            if (area.is_active) {
+                if (area.type === "polygon") {
+                    const polygon = L.polygon(area.points, {
+                        color: area.color,
+                        fillColor: area.color,
+                        fillOpacity: 0.18,
+                        weight: 3,
+                    }).addTo(map);
+
+                    polygon.bindPopup(buildAreaPopupHtml(area));
+                    activeAreaLayers.push({ area, layer: polygon });
+
+                    for (const point of area.points) {
+                        bounds.push([point.lat, point.lng]);
+                    }
+                } else {
+                    const circle = L.circle([area.center_lat, area.center_lon], {
+                        radius: area.radius_m,
+                        color: area.color,
+                        fillColor: area.color,
+                        fillOpacity: 0.18,
+                        weight: 3,
+                    }).addTo(map);
+
+                    circle.bindPopup(buildAreaPopupHtml(area));
+                    activeAreaLayers.push({ area, layer: circle });
+
+                    bounds.push([area.center_lat, area.center_lon]);
+                }
+            } else {
+                if (area.type === "polygon") {
+                    const polygon = L.polygon(area.points, {
+                        color: area.color,
+                        fillColor: area.color,
+                        fillOpacity: 0.12,
+                        weight: 2,
+                    }).addTo(map);
+
+                    polygon.bindPopup(buildAreaPopupHtml(area));
+
+                    for (const point of area.points) {
+                        bounds.push([point.lat, point.lng]);
+                    }
+                } else {
+                    const circle = L.circle([area.center_lat, area.center_lon], {
+                        radius: area.radius_m,
+                        color: area.color,
+                        fillColor: area.color,
+                        fillOpacity: 0.12,
+                        weight: 2,
+                    }).addTo(map);
+
+                    circle.bindPopup(buildAreaPopupHtml(area));
+
+                    bounds.push([area.center_lat, area.center_lon]);
+                }
+            }
+        }
+
+        for (const point of clusterPoints) {
+            const marker = L.circleMarker([point.latitude, point.longitude], {
+                radius: 8,
+                color: point.color,
+                fillColor: point.color,
+                fillOpacity: 0.9,
+                weight: 2,
+            }).addTo(map);
+
+            marker.bindPopup(buildMarkerPopupHtml(point));
+            markerByOrderId.set(point.id, marker);
+
+            const routeStop = getRoutePointByOrderId(point.id);
+
+            if (routeStop) {
+                const stopLabelMarker = L.marker([point.latitude, point.longitude], {
+                    icon: L.divIcon({
+                        className: "",
+                        html: `<div class="route-stop-label">${routeStop.stop_number}</div>`,
+                        iconSize: [30, 30],
+                        iconAnchor: [-6, 10],
+                    }),
+                    interactive: false,
+                    keyboard: false,
+                }).addTo(map);
+
+                stopLabelByOrderId.set(point.id, stopLabelMarker);
+                bounds.push([point.latitude, point.longitude]);
+            }
+
+            bounds.push([point.latitude, point.longitude]);
+        }
+
+        document.addEventListener("submit", async (event) => {
+            const form = event.target;
+
+            if (!form.classList.contains("js-complete-order-form")) {
+                return;
+            }
+
+            event.preventDefault();
+
+            const orderId = Number(form.dataset.orderId || 0);
+            const submitButton = form.querySelector("button[type=submit]");
+
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.textContent = "Сохраняем...";
+            }
+
+            try {
+                const response = await fetch(form.action, {
+                    method: "POST",
+                    headers: {
+                        "X-CSRFToken": csrfToken,
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.ok) {
+                    throw new Error("Не удалось отметить доставку.");
+                }
+
+                updateMarkerAfterDelivery(orderId, data.status || "Доставлено");
+
+                if (data.cluster_completed && data.redirect_url) {
+                    window.location.href = data.redirect_url;
+                }
+            } catch (error) {
+                console.error(error);
+
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = "В этот дом доставлено";
+                }
+
+                alert("Не удалось сохранить доставку. Попробуй ещё раз.");
+            }
+        });
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [30, 30] });
+        }
+
+        drawRoadRoute();
+        syncTelegramUserDebug();
+    </script>
+{% endblock %}

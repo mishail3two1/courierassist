@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Карта кластеров - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Карта кластеров</h1>
+    <p class="muted">
+        Здесь показаны только заказы со статусом NEED, разбитые на кластеры и окрашенные разными цветами.
+    </p>
+
+    <div style="margin: 18px 0; padding: 14px; border: 1px solid #ddd; border-radius: 10px;">
+        <p style="margin: 0 0 8px 0;"><strong>Кластеров:</strong> {{ cluster_count }}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Лимит заказов в кластере:</strong> {{ max_cluster_size }}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Максимальная дистанция:</strong> {{ max_distance_km }} км</p>
+        <p style="margin: 0;"><strong>Максимальный общий вес:</strong> {{ max_total_weight }}</p>
+    </div>
+
+    {% if cluster_points %}
+        <p>На карте будет показано точек: <strong>{{ cluster_points|length }}</strong></p>
+    {% else %}
+        <p>Пока нет заказов с координатами и статусом NEED, которые можно показать как кластеры.</p>
+    {% endif %}
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    >
+
+    <style>
+        #cluster-map {
+            width: 100%;
+            height: 560px;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .cluster-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .cluster-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .cluster-legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+        }
+    </style>
+
+    <div id="cluster-map"></div>
+
+    {% if cluster_points %}
+        <div class="cluster-legend" id="cluster-legend"></div>
+    {% endif %}
+
+    {{ cluster_points|json_script:"cluster-map-data" }}
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
+
+    <script>
+        const points = JSON.parse(
+            document.getElementById("cluster-map-data").textContent
+        );
+
+        const defaultCenter = [55.16, 61.40];
+        const defaultZoom = 11;
+
+        const map = L.map("cluster-map").setView(defaultCenter, defaultZoom);
+
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap",
+        }).addTo(map);
+
+        const bounds = [];
+        const legendMap = new Map();
+
+        for (const point of points) {
+            const marker = L.circleMarker([point.latitude, point.longitude], {
+                radius: 8,
+                color: point.cluster_color,
+                fillColor: point.cluster_color,
+                fillOpacity: 0.75,
+                weight: 2,
+            }).addTo(map);
+
+            marker.bindPopup(
+                `<strong>Кластер ${point.cluster_number}</strong><br>` +
+                `Заказ #${point.id}<br>` +
+                `Адрес: ${point.address}<br>` +
+                `Статус: ${point.status}<br>` +
+                `Вес: ${point.weight}`
+            );
+
+            bounds.push([point.latitude, point.longitude]);
+
+            if (!legendMap.has(point.cluster_number)) {
+                legendMap.set(point.cluster_number, point.cluster_color);
+            }
+        }
+
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [30, 30] });
+        }
+
+        const legend = document.getElementById("cluster-legend");
+
+        if (legend) {
+            for (const [clusterNumber, clusterColor] of legendMap.entries()) {
+                const item = document.createElement("div");
+                item.className = "cluster-legend-item";
+
+                item.innerHTML =
+                    `<span class="cluster-legend-color" style="background:${clusterColor};"></span>` +
+                    `<span>Кластер ${clusterNumber}</span>`;
+
+                legend.appendChild(item);
+            }
+        }
+    </script>
+{% endblock %}

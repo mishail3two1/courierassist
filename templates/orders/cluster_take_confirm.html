@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Подтверждение кластера - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Подтверждение взятия кластера</h1>
+    <p class="muted">
+        После подтверждения все заказы этого кластера будут закреплены за вами
+        и перейдут в статус <strong>In progress</strong>.
+    </p>
+
+    <div style="margin: 18px 0; padding: 16px; border: 1px solid #ddd; border-radius: 12px;">
+        <p><strong>Кластер:</strong> {{ cluster.number }}</p>
+        <p><strong>Заказов:</strong> {{ orders|length }}</p>
+        <p><strong>Общий вес:</strong> {{ total_weight }}</p>
+    </div>
+
+    {% if orders %}
+        <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+            <thead>
+                <tr>
+                    <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">ID</th>
+                    <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">Адрес</th>
+                    <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">Вес</th>
+                    <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                    <tr>
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ order.id }}</td>
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ order.address }}</td>
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ order.weight }}</td>
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ order.get_status_display }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
+            <form method="post" action="{% url 'take_cluster' cluster.id %}">
+                {% csrf_token %}
+                <button type="submit">Подтвердить взятие кластера</button>
+            </form>
+
+            <a href="{% url 'order_map' %}" style="padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; text-decoration: none; color: #222;">
+                Отмена
+            </a>
+        </div>
+    {% else %}
+        <p>В этом кластере сейчас нет заказов для взятия.</p>
+    {% endif %}
+{% endblock %}

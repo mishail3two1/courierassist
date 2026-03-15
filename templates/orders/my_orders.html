@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Мои заказы - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Мои заказы</h1>
+    <p class="muted">Здесь показаны только те заказы, которые назначены текущему пользователю.</p>
+    <p class="muted">Завершение заказа теперь выполняется только на карте — нажатием на нужный дом.</p>
+
+    <div style="margin: 20px 0;">
+        <strong>Фильтр по статусу:</strong>
+        <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="{% url 'my_orders' %}"
+               style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; text-decoration: none; color: #222;">
+                Все
+            </a>
+
+            <a href="{% url 'my_orders' %}?status=NEED"
+               style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; text-decoration: none; color: #222;">
+                Need
+            </a>
+
+            <a href="{% url 'my_orders' %}?status=IN_PROGRESS"
+               style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; text-decoration: none; color: #222;">
+                In progress
+            </a>
+
+            <a href="{% url 'my_orders' %}?status=DELIVERED"
+               style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; text-decoration: none; color: #222;">
+                Delivered
+            </a>
+        </div>
+    </div>
+
+    {% if current_status %}
+        <p class="muted">Сейчас показаны заказы со статусом: <strong>{{ current_status }}</strong></p>
+    {% else %}
+        <p class="muted">Сейчас показаны все ваши заказы.</p>
+    {% endif %}
+
+    {% if orders %}
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+            <thead>
+                <tr>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">ID</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Адрес</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Статус</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Создан</th>
+                    <th style="text-align: left; padding: 12px 10px; border-bottom: 1px solid #ddd;">Действие</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                    <tr>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{{ order.id }}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{{ order.address }}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">{{ order.get_status_display }}</td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">
+                            {{ order.created_at|date:"d.m.Y H:i" }}
+                        </td>
+                        <td style="padding: 12px 10px; border-bottom: 1px solid #eee;">
+                            {% if order.status == "IN_PROGRESS" %}
+                                Завершение только на карте
+                            {% elif order.status == "DELIVERED" %}
+                                Завершён
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>По выбранному фильтру заказов нет.</p>
+    {% endif %}
+{% endblock %}

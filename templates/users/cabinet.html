@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Личный кабинет - CourierAssist{% endblock %}
+
+{% block extra_head %}
+    <script src="https://telegram.org/js/telegram-web-app.js?61"></script>
+{% endblock %}
+
+{% block content %}
+    <h1>Личный кабинет</h1>
+    <p class="muted">Это простая персональная страница текущего пользователя.</p>
+
+    <div style="margin-top: 20px;">
+        <p><strong>Username:</strong> {{ request.user.username }}</p>
+        <p><strong>Роль:</strong> {{ request.user.get_role_display }}</p>
+        <p><strong>Привязанный Telegram ID:</strong> {{ request.user.telegram_user_id|default:"—" }}</p>
+        <p><strong>Привязанный Telegram username:</strong> {{ request.user.telegram_username|default:"—" }}</p>
+    </div>
+
+    <hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e5e5;">
+
+    <h2 style="margin-top: 0;">Связка Telegram и Django-аккаунта</h2>
+
+    {% if telegram_link_result %}
+        {% if telegram_link_result.ok %}
+            <div style="margin-bottom: 14px; padding: 12px; border-radius: 10px; background: #eef9ef; border: 1px solid #b9dfbb;">
+                {{ telegram_link_result.text }}
+            </div>
+        {% else %}
+            <div style="margin-bottom: 14px; padding: 12px; border-radius: 10px; background: #fff1f1; border: 1px solid #f0b9b9;">
+                {{ telegram_link_result.text }}
+            </div>
+        {% endif %}
+    {% endif %}
+
+    <div style="margin: 18px 0; padding: 16px; border: 1px solid #ddd; border-radius: 12px; background: #fafbfc;">
+        <p id="telegram-client-status" class="muted" style="margin-bottom: 12px;">
+            Пока ещё не проверяли Telegram-данные на этой странице.
+        </p>
+
+        <div id="telegram-client-user" style="margin-bottom: 14px;">
+            <p class="muted" style="margin: 0;">Пользователь со стороны браузера ещё не показан.</p>
+        </div>
+
+        <div id="telegram-server-user" style="margin-bottom: 14px;">
+            {% if telegram_debug_user %}
+                <p style="margin: 0 0 8px 0;"><strong>Django уже получил пользователя:</strong></p>
+                <p style="margin: 0;"><strong>ID:</strong> {{ telegram_debug_user.id|default:"—" }}</p>
+                <p style="margin: 0;"><strong>Username:</strong> {{ telegram_debug_user.username|default:"—" }}</p>
+                <p style="margin: 0;"><strong>Имя:</strong> {{ telegram_debug_user.first_name|default:"—" }} {{ telegram_debug_user.last_name|default:"" }}</p>
+                <p style="margin: 0;"><strong>Язык:</strong> {{ telegram_debug_user.language_code|default:"—" }}</p>
+            {% else %}
+                <p class="muted" style="margin: 0;">Django пока ещё не получил Telegram-пользователя.</p>
+            {% endif %}
+        </div>
+
+        <div id="telegram-linked-user" style="margin-bottom: 14px; padding: 12px; border: 1px solid #ddd; border-radius: 10px; background: #fff;">
+            {% if linked_telegram_user %}
+                <p style="margin: 0 0 8px 0;"><strong>Mini App узнал привязанного курьера:</strong></p>
+                <p style="margin: 0;"><strong>Username:</strong> {{ linked_telegram_user.username }}</p>
+                <p style="margin: 0;"><strong>Роль:</strong> {{ linked_telegram_user.get_role_display }}</p>
+                <p style="margin: 0;"><strong>Telegram ID:</strong> {{ linked_telegram_user.telegram_user_id }}</p>
+            {% else %}
+                <p class="muted" style="margin: 0;">По данным Telegram пока не найден привязанный курьер.</p>
+            {% endif %}
+        </div>
+
+        {% if telegram_debug_user %}
+            <form method="post" style="margin: 0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="link_telegram_account">
+                <button type="submit">Привязать Telegram к моему аккаунту</button>
+            </form>
+        {% else %}
+            <p class="muted" style="margin: 0;">Сначала Mini App должен получить Telegram-пользователя на этой странице.</p>
+        {% endif %}
+    </div>
+
+    <hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e5e5;">
+
+    <h2 style="margin-top: 0;">Краткая информация по заказам</h2>
+
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px;">
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 10px; min-width: 180px;">
+            <strong>Всего заказов</strong>
+            <div style="font-size: 28px; margin-top: 8px;">{{ total_orders }}</div>
+        </div>
+
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 10px; min-width: 180px;">
+            <strong>Активных</strong>
+            <div style="font-size: 28px; margin-top: 8px;">{{ in_progress_orders }}</div>
+        </div>
+
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 10px; min-width: 180px;">
+            <strong>Завершённых</strong>
+            <div style="font-size: 28px; margin-top: 8px;">{{ delivered_orders }}</div>
+        </div>
+    </div>
+
+    <form id="csrf-form" style="display:none;">
+        {% csrf_token %}
+    </form>
+
+    <script>
+        const csrfToken = document.querySelector(
+            '#csrf-form input[name=csrfmiddlewaretoken]'
+        )?.value || '';
+
+        async function syncTelegramUserDebug() {
+            const statusEl = document.getElementById('telegram-client-status');
+            const clientUserEl = document.getElementById('telegram-client-user');
+            const serverUserEl = document.getElementById('telegram-server-user');
+            const linkedUserEl = document.getElementById('telegram-linked-user');
+
+            if (!(window.Telegram && window.Telegram.WebApp)) {
+                statusEl.textContent = 'Страница открыта не внутри Telegram Mini App.';
+                return;
+            }
+
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+
+            const telegramUser = tg.initDataUnsafe?.user;
+
+            if (!telegramUser) {
+                statusEl.textContent = 'Mini App открыт, но объект пользователя Telegram пока не найден.';
+                return;
+            }
+
+            statusEl.textContent = 'Telegram Mini App найден. Пользователь успешно получен в браузере.';
+
+            clientUserEl.innerHTML =
+                `<p style="margin: 0 0 8px 0;"><strong>Пользователь со стороны Mini App:</strong></p>` +
+                `<p style="margin: 0;"><strong>ID:</strong> ${telegramUser.id ?? '—'}</p>` +
+                `<p style="margin: 0;"><strong>Username:</strong> ${telegramUser.username ?? '—'}</p>` +
+                `<p style="margin: 0;"><strong>Имя:</strong> ${telegramUser.first_name ?? '—'} ${telegramUser.last_name ?? ''}</p>` +
+                `<p style="margin: 0;"><strong>Язык:</strong> ${telegramUser.language_code ?? '—'}</p>`;
+
+            const formData = new FormData();
+            formData.append('action', 'save_telegram_user_debug');
+            formData.append('telegram_id', String(telegramUser.id ?? ''));
+            formData.append('telegram_username', telegramUser.username ?? '');
+            formData.append('telegram_first_name', telegramUser.first_name ?? '');
+            formData.append('telegram_last_name', telegramUser.last_name ?? '');
+            formData.append('telegram_language_code', telegramUser.language_code ?? '');
+
+            try {
+                const response = await fetch(window.location.pathname, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: formData,
+                    credentials: 'same-origin',
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.ok) {
+                    throw new Error('Django не подтвердил получение Telegram-пользователя.');
+                }
+
+                const user = data.telegram_user;
+
+                serverUserEl.innerHTML =
+                    `<p style="margin: 0 0 8px 0;"><strong>Django получил пользователя:</strong></p>` +
+                    `<p style="margin: 0;"><strong>ID:</strong> ${user.id || '—'}</p>` +
+                    `<p style="margin: 0;"><strong>Username:</strong> ${user.username || '—'}</p>` +
+                    `<p style="margin: 0;"><strong>Имя:</strong> ${user.first_name || '—'} ${user.last_name || ''}</p>` +
+                    `<p style="margin: 0;"><strong>Язык:</strong> ${user.language_code || '—'}</p>`;
+
+                if (data.linked_user) {
+                    linkedUserEl.innerHTML =
+                        `<p style="margin: 0 0 8px 0;"><strong>Mini App узнал привязанного курьера:</strong></p>` +
+                        `<p style="margin: 0;"><strong>Username:</strong> ${data.linked_user.username || '—'}</p>` +
+                        `<p style="margin: 0;"><strong>Роль:</strong> ${data.linked_user.role || '—'}</p>` +
+                        `<p style="margin: 0;"><strong>Telegram ID:</strong> ${data.linked_user.telegram_user_id || '—'}</p>`;
+                } else {
+                    linkedUserEl.innerHTML =
+                        `<p class="muted" style="margin: 0;">По данным Telegram пока не найден привязанный курьер.</p>`;
+                }
+            } catch (error) {
+                serverUserEl.innerHTML =
+                    `<p style="margin: 0; color: #b00020;">Django пока не смог принять Telegram-пользователя.</p>`;
+                console.error(error);
+            }
+        }
+
+        syncTelegramUserDebug();
+    </script>
+{% endblock %}

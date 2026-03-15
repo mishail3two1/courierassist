@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Вход - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Вход в систему</h1>
+    <p class="muted">Войди в уже созданный аккаунт.</p>
+
+    {% if request.GET.registered == '1' %}
+        <div class="success-box">Аккаунт успешно создан. Теперь можно войти.</div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Войти</button>
+    </form>
+
+    <p style="margin-top: 16px;">
+        Ещё нет аккаунта? <a href="{% url 'register' %}">Зарегистрироваться</a>
+    </p>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Кластер завершён - CourierAssist{% endblock %}
+
+{% block content %}
+    <h1>Вы успешно доставили все заказы из области</h1>
+    <p class="muted">
+        Активный кластер завершён. Ниже простая учебная статистика по нему.
+    </p>
+
+    <div style="margin-top: 20px; padding: 18px; border: 1px solid #ddd; border-radius: 12px;">
+        <p><strong>Кластер:</strong> № {{ cluster.number }}</p>
+        <p><strong>Доставлено заказов:</strong> {{ delivered_count }}</p>
+        <p><strong>Общий вес:</strong> {{ total_weight }}</p>
+        <p><strong>Условный заработок:</strong> {{ total_earnings }}</p>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <a href="{% url 'order_map' %}"
+           style="display:inline-block; padding: 10px 14px; border: 1px solid #ccc; border-radius: 8px; text-decoration: none; color: #222;">
+            Принять и вернуться к карте
+        </a>
+    </div>
+{% endblock %}
